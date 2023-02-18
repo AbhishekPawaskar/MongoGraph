@@ -25,14 +25,14 @@ class DataBaseController:
         except Exception as connection_err:
             raise ConnectionError("FAILED TO CONNECT TO MONGODB"+str(connection_err))
     
-    def __is_connected(self):
+    def is_connected(self):
         try:
             if self.__database_client.server_info():
                 return True
         except Exception as connection_err:
             raise ConnectionError("BROKEN CONNECTION TO MONGODB"+str(connection_err))
     
-    def __close_connection(self):
+    def close_connection(self):
         try:
             self.__database_client.close()
             return True
@@ -41,7 +41,7 @@ class DataBaseController:
     
     def __stabilise_connection(self):
         try:
-            if self.__is_connected():
+            if self.is_connected():
                 return True
             else:
                 stopper = self.__max_retry_value
@@ -75,11 +75,12 @@ class DataBaseController:
 
             if (vertex_collection_list) != [] and (vertex_collection_list != None):
                 for vertex_name in vertex_collection_list:
-                    self.__vertex_collection_dict[str(vertex_name)] = self.__vertex_db[str(vertex_name)]
+                    self.__vertex_collection_dict.update({str(vertex_name):self.__vertex_db[str(vertex_name)]})
             
             if (edge_collection_list) != [] and (edge_collection_list != None):
                 for edge_name in edge_collection_list:
-                    self.__edge_collection_dict[str(edge_name)] = self.__edge_db[str(edge_name)]
+                    self.__edge_collection_dict.update({str(edge_name):self.__edge_db[str(edge_name)]})
+            return True
 
         except Exception as logic_err:
             raise ConnectionError("FAILED TO SETUP DATABASES"+str(logic_err))
@@ -102,14 +103,14 @@ class DataBaseController:
         if self.__collection_exists(collection_name="vertex",db_name=collection_name):
             return False
         else:
-            self.__vertex_collection_dict[str(collection_name)] = self.__vertex_db[str(collection_name)]
+            self.__vertex_collection_dict.update({str(collection_name):self.__vertex_db[str(collection_name)]})
             return True
     
     def __add_edge_dict_object(self, collection_name:str):
         if self.__collection_exists(collection_name="edge",db_name=collection_name):
             return False
         else:
-            self.__edge_collection_dict[str(collection_name)] = self.__edge_db[str(collection_name)]
+            self.__edge_collection_dict.update({str(collection_name):self.__edge_db[str(collection_name)]})
             return True
     
     def vertex_exists(self, vertex_id:str, vertex_label:str):
@@ -151,23 +152,26 @@ class DataBaseController:
             raise RuntimeError("EMPTY DICTIONARY IS NOT ACCEPTED")
         
         if self.__collection_exists(collection_name=vertex_label, db_name="vertex"):
-            property_dict["label"] = vertex_label
-            vertex_id = self.__vertex_collection_dict[vertex_label].insert_one(property_dict)
-            return str(vertex_id)
+            property_dict.update({"label":vertex_label})
+            vertex = self.__vertex_collection_dict[vertex_label].insert_one(property_dict)
+            if vertex.acknowledged:
+                return str(vertex.inserted_id)
         
         else:
             vertex_ack = self.__add_vertex_dict_object(collection_name=vertex_label)
-            property_dict["label"] = vertex_label
-            vertex_id = self.__vertex_collection_dict[vertex_label].insert_one(property_dict)
-            return str(vertex_id)
+            property_dict.update({"label": vertex_label})
+            vertex = self.__vertex_collection_dict[vertex_label].insert_one(property_dict)
+            if vertex.acknowledged:
+                return str(vertex.inserted_id)
     
     def update_vertex(self, vertex_id:str, vertex_label:str, updated_property_dict:dict):
         if updated_property_dict == {}:
             raise RuntimeError("EMPTY DICTIONARY IS NOT ACCEPTED")
         if self.__collection_exists(collection_name=vertex_label, db_name="vertex"):
-            updated_property_dict["_id"] = bson.objectid.ObjectId(vertex_id)
-            updated_property_dict["label"] = vertex_label
-            vertex_update_ack = self.__vertex_collection_dict[vertex_label].update_one(updated_property_dict)
+            updated_property_dict.update({"label":vertex_label})
+            vertex_update_ack = self.__vertex_collection_dict[vertex_label].update_one({"_id":bson.objectid.ObjectId(vertex_id)},
+                                                                                       {"$set":updated_property_dict}, 
+                                                                                       upsert=False)
             if vertex_update_ack.matched_count == 1:
                 return True
             else:
@@ -208,27 +212,30 @@ class DataBaseController:
                                                                                         vertex_label=to_vertex_label):
             if self.__collection_exists(collection_name=edge_label, db_name="edge"):
                 if direction in ["unidirection","bidirection"]:
-                    property_dict["from_vertex_label"] = from_vertex_label
-                    property_dict["to_vertex_label"] = to_vertex_label
-                    property_dict["from_vertex_id"] = from_vertex_id
-                    property_dict["to_vertex_id"] = to_vertex_id
-                    property_dict["edge_label"] = edge_label
-                    property_dict["direction"] = direction
-                    edge_id = self.__edge_collection_dict[edge_label].insert_one(property_dict)
-                    return edge_id
+                    property_dict.update({"from_vertex_label":from_vertex_label})
+                    property_dict.update({"to_vertex_label":to_vertex_label})
+                    property_dict.update({"from_vertex_id":from_vertex_id})
+                    property_dict.update({"to_vertex_id":to_vertex_id})
+                    property_dict.update({"edge_label":edge_label})
+                    property_dict.update({"direction":direction})
+                    edge = self.__edge_collection_dict[edge_label].insert_one(property_dict)
+                    if edge.acknowledged:
+                        return str(edge.inserted_id)
+                    
                 else:
                     raise RuntimeError("WORNG DIRECTION GIVEN")
             else:
                 if direction in ["unidirection","bidirection"]:
                     edge_collection_ack = self.__add_edge_dict_object(collection_name=edge_label)
-                    property_dict["from_vertex_label"] = from_vertex_label
-                    property_dict["to_vertex_label"] = to_vertex_label
-                    property_dict["from_vertex_id"] = from_vertex_id
-                    property_dict["to_vertex_id"] = to_vertex_id
-                    property_dict["label"] = edge_label
-                    property_dict["direction"] = direction
-                    edge_id = self.__edge_collection_dict[edge_label].insert_one(property_dict)
-                    return edge_id
+                    property_dict.update({"from_vertex_label":from_vertex_label})
+                    property_dict.update({"to_vertex_label":to_vertex_label})
+                    property_dict.update({"from_vertex_id":from_vertex_id})
+                    property_dict.update({"to_vertex_id":to_vertex_id})
+                    property_dict.update({"label":edge_label})
+                    property_dict.update({"direction":direction})
+                    edge = self.__edge_collection_dict[edge_label].insert_one(property_dict)
+                    if edge.acknowledged:
+                        return str(edge.inserted_id)
                 else:
                     raise RuntimeError("WORNG DIRECTION GIVEN")
     
@@ -237,9 +244,11 @@ class DataBaseController:
             raise RuntimeError("EMPTY DICTIONARY IS NOT ACCEPTED")
         if self.__collection_exists(collection_name=edge_label, db_name="edge"):
             if self.edge_exists(edge_label=edge_label, edge_id=edge_id):
-                updated_property_dict["_id"] = bson.objectid.ObjectId(edge_id)
-                updated_property_dict["label"] = edge_label
-                edge_update_ack = self.__edge_collection_dict[edge_label].update_one(updated_property_dict)
+                #updated_property_dict["label"] = edge_label
+                updated_property_dict.update({"label": edge_label})
+                edge_update_ack = self.__edge_collection_dict[edge_label].update_one({"_id":bson.objectid.ObjectId(edge_id)},
+                                                                                     {"$set":updated_property_dict}, 
+                                                                                     upsert=False)
                 if edge_update_ack.matched_count == 1:
                     return True
                 else:
@@ -249,7 +258,7 @@ class DataBaseController:
         else:
             return False
     
-    def edge_vertex(self, edge_id:str, edge_label:str):
+    def delete_edge(self, edge_id:str, edge_label:str):
         if self.edge_exists(edge_id=edge_id, edge_label=edge_label):
             result = self.__edge_collection_dict[edge_label].delete_one({"_id":bson.objectid.ObjectId(edge_id)})
             if result.deleted_count > 0:
