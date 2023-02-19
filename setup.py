@@ -23,5 +23,5 @@ setup(name='mongograph',
         classifiers=['Development Status :: 4 - Beta', 
                      'License :: OSI Approved :: Apache Software License', 
                      'Programming Language :: Python :: 3.10', 
-                     'Topic :: Graph :: MongoDB :: Database'],
+                     'Topic :: Database :: Database Engines/Servers'],
         include_package_data=True)
